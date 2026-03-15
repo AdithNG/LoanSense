@@ -2,6 +2,23 @@
 
 A three-level AI loan approval project: **ML scoring** → **LLM email automation** → **AI agents with guardrails** (bias detection, next-best-offer). Built to showcase production-ready AI skills for recruiters.
 
+## Project structure
+
+```
+LoanSense/
+├── app.py                 # Streamlit UI (train, score, email/agent)
+├── scripts/               # CLI: train, score, generate_email, run_agent_pipeline
+├── src/
+│   ├── data/              # Load CSV/sample, preprocess, feature engineering
+│   ├── models/            # Train (GB/RF), evaluate, predict, save pipeline
+│   ├── llm/               # LLM customer email from approve/deny
+│   ├── agents/            # Bias detection, next-best-offer, pipeline
+│   └── api/               # FastAPI: /score, /generate-email, /agent-pipeline
+├── tests/                 # Pytest suite (data, models, llm, agents, API)
+├── data/                  # Optional: loan_data.csv
+└── models/                # Saved pipeline (after train)
+```
+
 ## Levels
 
 | Level | What it does |
@@ -61,8 +78,9 @@ python scripts/run_agent_pipeline.py --decision deny --applicant_name "Jane Doe"
 
 ```bash
 uvicorn src.api.main:app --reload
-# POST /score, POST /generate-email, POST /agent-pipeline
 ```
+
+Interactive API docs: **http://127.0.0.1:8000/docs** — try `POST /score`, `POST /generate-email`, `POST /agent-pipeline`.
 
 ### Web UI (Streamlit)
 

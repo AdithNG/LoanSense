@@ -24,6 +24,35 @@ MODEL_DIR = _root / "models"
 st.set_page_config(page_title="LoanSense", page_icon="📋", layout="centered")
 st.title("📋 LoanSense — Loan Approval Demo")
 
+# Train model (Level 1)
+st.header("Train model")
+with st.expander("Train or retrain the approval model (sample data)", expanded=False):
+    alg = st.selectbox("Algorithm", ["gradient_boosting", "random_forest"], format_func=lambda x: "Gradient Boosting" if x == "gradient_boosting" else "Random Forest")
+    n_samples = st.slider("Sample size", 500, 5000, 2000, 500)
+    if st.button("Train model"):
+        try:
+            with st.spinner("Training..."):
+                from src.data import load_sample_data, preprocess_features, prepare_splits
+                from src.models.train import train_model, evaluate_model, save_pipeline
+                df = load_sample_data(n=n_samples, seed=42)
+                df = preprocess_features(df)
+                train_df, val_df, test_df = prepare_splits(df, 0.8, 0.1, 0.1, seed=42)
+                model, X_val, y_val, feature_cols = train_model(train_df, val_df, algorithm=alg, seed=42)
+                X_test = test_df[feature_cols]
+                y_test = test_df["approved"]
+                metrics = evaluate_model(model, X_val, y_val, X_test, y_test)
+                save_pipeline(model, feature_cols, metrics, MODEL_DIR)
+            st.success("Model saved to `models/`")
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Validation accuracy", f"{metrics['validation']['accuracy']:.2%}")
+                st.metric("Validation F1", f"{metrics['validation']['f1']:.3f}")
+            with col2:
+                st.metric("Test accuracy", f"{metrics['test']['accuracy']:.2%}")
+                st.metric("Test F1", f"{metrics['test']['f1']:.3f}")
+        except Exception as e:
+            st.error(str(e))
+
 # Level 1: Score
 st.header("Score an application")
 with st.form("score_form"):
