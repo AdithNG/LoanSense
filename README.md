@@ -27,6 +27,8 @@ LoanSense/
 | **2. Intermediate** | LLM takes the ML decision and an optional **reason** (from the model/features) and generates a personalized email explaining the outcome (adds probabilistic component). |
 | **3. Advanced** | Agent detects bias/discrimination in the email → scores it → escalates to human or re-runs through a stricter agent; optional next-best-offer agent for denied applicants. |
 
+**Agent / LLM:** All LLM calls use **OpenAI** (default model: `gpt-4o-mini`, overridable via `OPENAI_MODEL` in `.env`). The “agent pipeline” is three steps: (1) generate customer email, (2) **bias agent** scores that email for discrimination/unprofessional content and can escalate to human, (3) for **denied** applicants a **next-best-offer agent** suggests an alternative (e.g. smaller loan) and appends it to the email. With “Generate email only” you get step 1 only; with “agent pipeline” you get all three.
+
 ## Skills demonstrated
 
 - Data analysis, preprocessing, feature engineering  
