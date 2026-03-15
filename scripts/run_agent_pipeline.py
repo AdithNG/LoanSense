@@ -2,9 +2,13 @@
 
 import argparse
 import os
+from pathlib import Path
 
 from dotenv import load_dotenv
-load_dotenv()
+
+# Load .env from project root so your key is used (overrides any system/shell OPENAI_API_KEY)
+_load_env = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(_load_env, override=True)
 
 from src.agents.pipeline import run_agent_pipeline
 

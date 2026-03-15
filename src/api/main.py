@@ -3,8 +3,13 @@
 from pathlib import Path
 
 import pandas as pd
+from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+
+# Load project .env so OPENAI_API_KEY from repo is used (overrides system/shell)
+_load_env = Path(__file__).resolve().parent.parent.parent / ".env"
+load_dotenv(_load_env, override=True)
 
 from src.data.preprocess import preprocess_features
 from src.models.predict import load_pipeline, predict, predict_proba
