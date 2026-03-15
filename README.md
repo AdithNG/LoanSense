@@ -42,7 +42,7 @@ $env:PYTHONPATH = (Get-Location).Path
 python scripts/train.py --data data/loan_data.csv
 
 # Score one application (deployment simulation)
-python scripts/score.py --income 50000 --debt 10000 --employment_years 5
+python scripts/score.py --income 50000 --debt 10000 --employment_years 5 --credit_score 650
 ```
 
 ### Level 2: Generate email with LLM
@@ -63,6 +63,16 @@ python scripts/run_agent_pipeline.py --decision deny --applicant_name "Jane Doe"
 uvicorn src.api.main:app --reload
 # POST /score, POST /generate-email, POST /agent-pipeline
 ```
+
+## Testing
+
+Run the test suite (from project root, with `PYTHONPATH` set as above):
+
+```bash
+python -m pytest tests/ -v
+```
+
+All tests use mocks for the OpenAI API, so no API key is required for tests. Level 2/3 scripts require a valid `OPENAI_API_KEY` in `.env`.
 
 ## Data
 
