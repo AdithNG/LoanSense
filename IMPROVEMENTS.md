@@ -9,8 +9,8 @@ Items from the original suggestions. **Done** = implemented; **Todo** = still to
 | Item | Status | Notes |
 |------|--------|--------|
 | **Real dataset** — Add a link or script to a public loan dataset (e.g. UCI Credit, Kaggle) and document training from `data/loan_data.csv` in the UI or CLI. | Done | `scripts/download_loan_data.py` fetches UCI Credit Approval, maps to schema, saves `data/loan_data.csv`. README updated; UI sidebar has "Train from data/loan_data.csv" when file exists. |
-| **Model interpretability** — Use SHAP or feature importance to explain why the model approved/denied a specific application (beyond the rule-based `explain_decision`), and show it in the UI or API. | Todo | SHAP values or feature importance per prediction; expose in `/score` response and/or Streamlit. |
-| **Hyperparameter tuning** — Optional grid search or Optuna for the Gradient Boosting (and RF) model and mention it in the README. | Todo | e.g. `scripts/tune.py` with Optuna/grid search; document in README. |
+| **Model interpretability** — Use SHAP or feature importance to explain why the model approved/denied a specific application (beyond the rule-based `explain_decision`), and show it in the UI or API. | Done | `src/models/explain.py`: SHAP TreeExplainer per-prediction contributions. `/score` returns `feature_contributions`; Streamlit shows "Why this decision?" expander. |
+| **Hyperparameter tuning** — Optional grid search or Optuna for the Gradient Boosting (and RF) model and mention it in the README. | Done | `scripts/tune.py`: Optuna over n_estimators, max_depth, learning_rate (GB) or n_estimators, max_depth (RF); saves best pipeline. README updated. |
 
 ---
 
@@ -72,5 +72,5 @@ Items from the original suggestions. **Done** = implemented; **Todo** = still to
 
 ## Summary
 
-- **Done:** 14 (multi-provider, logging, retries, Docker Compose, health check, env config, integration test, /score-and-email API tests, architecture diagram, API validation, optional API auth, compare view, export/copy, real dataset).
-- **Todo:** 4 (SHAP/interpretability, hyperparameter tuning, talking points).
+- **Done:** 16 (multi-provider, logging, retries, Docker Compose, health check, env config, integration test, /score-and-email API tests, architecture diagram, API validation, optional API auth, compare view, export/copy, real dataset, model interpretability, hyperparameter tuning).
+- **Todo:** 2 (talking points).

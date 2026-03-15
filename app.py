@@ -18,6 +18,7 @@ import pandas as pd
 
 from src.data.preprocess import preprocess_features
 from src.models.predict import load_pipeline, predict, predict_proba, explain_decision, apply_guardrails
+from src.models.explain import get_prediction_contributions, format_contributions_for_display
 
 MODEL_DIR = _root / "models"
 
@@ -305,14 +306,17 @@ if submitted:
             prob = 0.0
             decision_int = 0
             reason = guardrail_reason or "Application does not meet guidelines."
+            contributions = {}
         else:
             model, feature_cols = load_pipeline(MODEL_DIR)
             prob = float(predict_proba(model, feature_cols, row)[0])
             decision_int = int(predict(model, feature_cols, row)[0])
             reason = explain_decision(row, decision_int)
+            contributions = get_prediction_contributions(model, feature_cols, row)
         decision_label = "Approved" if decision_int == 1 else "Denied"
 
         st.session_state["last_decision"] = "approve" if decision_int == 1 else "deny"
+        st.session_state["last_contributions"] = contributions
         st.session_state["last_reason"] = reason
         st.session_state["last_applicant_name"] = applicant_name
         for key in ("email_output", "email_from_agent", "email_meta"):
@@ -329,6 +333,11 @@ if submitted:
         with col_b:
             st.caption("**Reason for email**")
             st.write(reason if len(reason) <= 60 else reason[:57] + "...")
+        if contributions:
+            with st.expander("Why this decision? (SHAP contributions)", expanded=True):
+                st.caption("Per-feature contribution to the score (positive = toward approve, negative = toward deny).")
+                st.write(format_contributions_for_display(contributions))
+                st.json(contributions)
 st.markdown("</div>", unsafe_allow_html=True)
 st.markdown("---")
 

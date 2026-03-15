@@ -14,6 +14,7 @@ load_dotenv(_load_env, override=True)
 
 from src.data.preprocess import preprocess_features
 from src.models.predict import load_pipeline, predict, predict_proba, explain_decision, apply_guardrails
+from src.models.explain import get_prediction_contributions
 
 MODEL_DIR = Path(__file__).resolve().parent.parent.parent / "models"
 
@@ -58,6 +59,7 @@ class ScoreResponse(BaseModel):
     approval_probability: float
     decision: str  # "approved" | "denied"
     reason: str  # short explanation for LLM/email
+    feature_contributions: dict[str, float] | None = None  # SHAP-style per-feature contribution (optional)
 
 
 @app.post("/score", response_model=ScoreResponse)
@@ -84,10 +86,12 @@ def score(req: ScoreRequest, _: None = Depends(require_api_key)):
     prob = float(predict_proba(model, feature_cols, row)[0])
     decision_int = int(predict(model, feature_cols, row)[0])
     reason = explain_decision(row, decision_int)
+    contributions = get_prediction_contributions(model, feature_cols, row)
     return ScoreResponse(
         approval_probability=prob,
         decision="approved" if decision_int == 1 else "denied",
         reason=reason,
+        feature_contributions=contributions if contributions else None,
     )
 
 

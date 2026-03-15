@@ -103,9 +103,14 @@ $env:PYTHONPATH = (Get-Location).Path
 # Train (uses sample data or your CSV; omit --data to generate sample data)
 python scripts/train.py --data data/loan_data.csv
 
+# Optional: tune hyperparameters with Optuna (maximizes validation ROC-AUC)
+python scripts/tune.py --data data/loan_data.csv --algorithm gradient_boosting --trials 30
+
 # Score one application (deployment simulation)
 python scripts/score.py --income 50000 --debt 10000 --employment_years 5 --credit_score 650
 ```
+
+**Interpretability:** The `/score` API and Streamlit UI can return **per-prediction feature contributions** (SHAP values) so you can see which features pushed the decision toward approve or deny. Requires the `shap` package; tree-based models (Gradient Boosting, Random Forest) are supported.
 
 ### Level 2: Generate email with LLM
 
