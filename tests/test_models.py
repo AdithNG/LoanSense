@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from src.models.train import train_model, evaluate_model, save_pipeline
-from src.models.predict import load_pipeline, predict, predict_proba, explain_decision
+from src.models.predict import load_pipeline, predict, predict_proba, explain_decision, apply_guardrails
 from src.data.preprocess import get_feature_columns_for_model
 
 
@@ -78,6 +78,27 @@ def test_save_and_load_pipeline(train_val_test, tmp_path):
     with open(tmp_path / "metrics.json") as f:
         m = json.load(f)
     assert "validation" in m
+
+
+def test_apply_guardrails_high_dti():
+    row = pd.DataFrame([{"dti_ratio": 0.6, "credit_score": 600}])
+    decision, reason = apply_guardrails(row)
+    assert decision == 0
+    assert "debt-to-income" in (reason or "")
+
+
+def test_apply_guardrails_low_credit():
+    row = pd.DataFrame([{"dti_ratio": 0.3, "credit_score": 350}])
+    decision, reason = apply_guardrails(row)
+    assert decision == 0
+    assert "credit" in (reason or "").lower()
+
+
+def test_apply_guardrails_passes():
+    row = pd.DataFrame([{"dti_ratio": 0.35, "credit_score": 650}])
+    decision, reason = apply_guardrails(row)
+    assert decision is None
+    assert reason is None
 
 
 def test_explain_decision_denied_high_dti():

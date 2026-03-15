@@ -30,6 +30,34 @@ LoanSense/
 
 **Agent / LLM:** LLM calls go through a unified client that supports **OpenAI** (default) or **Anthropic** via `LLM_PROVIDER=openai|anthropic` in `.env`; set `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` accordingly. Default models: `gpt-4o-mini` (OpenAI), `claude-3-5-sonnet-20241022` (Anthropic). The client uses retries with backoff and structured logging (e.g. `email_generated`, `bias_score`, `escalated`). The “agent pipeline” is three steps: (1) generate customer email, (2) **bias agent** scores that email and can escalate to human, (3) for **denied** applicants a **next-best-offer agent** suggests an alternative and appends it to the email.
 
+## Architecture
+
+```mermaid
+flowchart LR
+    subgraph Data
+        A[CSV / sample data]
+    end
+    subgraph "Level 1: ML"
+        A --> B[Train GB/RF]
+        B --> C[Pipeline]
+        D[Application] --> E[Guardrails]
+        E --> C
+        C --> F[Score + reason]
+    end
+    subgraph "Level 2: LLM"
+        F --> G[Generate email]
+    end
+    subgraph "Level 3: Agents"
+        G --> H[Bias score]
+        H --> I{Escalate?}
+        I -->|Yes| J[Human review]
+        I -->|No| K{Denied?}
+        K -->|Yes| L[Next-best-offer]
+        L --> M[Final email]
+        K -->|No| M
+    end
+```
+
 ## Skills demonstrated
 
 - Data analysis, preprocessing, feature engineering  
@@ -41,16 +69,30 @@ LoanSense/
 
 ## Setup
 
+**Option A — Local (venv)**  
 ```bash
 python -m venv .venv
 .venv\Scripts\activate   # Windows
 pip install -r requirements.txt
-cp .env.example .env     # Add your OPENAI_API_KEY for Level 2/3
+cp .env.example .env    # Add OPENAI_API_KEY and/or ANTHROPIC_API_KEY for Level 2/3
 ```
+
+**Option B — Docker**  
+No venv needed. Install [Docker](https://docs.docker.com/get-docker/) and have a `.env` (copy from `.env.example`). Build and run below.
 
 ## Usage
 
-Run all commands from the project root. On Windows PowerShell, set the project root in Python path first:
+### How to start the app (starting commands)
+
+| Run mode | Command | What you get |
+|----------|---------|----------------|
+| **Local — UI only** | `streamlit run app.py` | Streamlit at http://localhost:8501 (train, score, email/agent in the browser). |
+| **Local — API only** | `uvicorn src.api.main:app --reload` | API at http://127.0.0.1:8000 (docs at /docs). |
+| **Local — API + UI** | Run the two commands above in separate terminals. | Both API and Streamlit. |
+| **Docker — API + UI** | `docker compose up --build` | API at http://localhost:8000, Streamlit at http://localhost:8501. One command starts both. |
+| **Docker — UI only** | `docker build -t loansense .` then `docker run -p 8501:8501 --env-file .env loansense` | Streamlit only at http://localhost:8501. |
+
+On Windows PowerShell (local runs), set the project root in Python path first:
 ```powershell
 $env:PYTHONPATH = (Get-Location).Path
 ```
@@ -93,26 +135,14 @@ Interactive API docs: **http://127.0.0.1:8000/docs**
 streamlit run app.py
 ```
 
-Opens a browser: **train** (sample data), **score** an application, and (if `OPENAI_API_KEY` is set) generate customer emails or run the full agent pipeline.
+Opens a browser: **train** (sample data), **score** an application, and (if `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` is set) generate customer emails or run the full agent pipeline.
 
-### Docker and Docker Compose
+### Docker details
 
-**Single container (Streamlit only):**
-```bash
-docker build -t loansense .
-docker run -p 8501:8501 --env-file .env loansense
-```
-Open http://localhost:8501.
-
-**API + Streamlit together (Docker Compose):**
-```bash
-docker compose up --build
-```
-- API: http://localhost:8000 (docs at /docs)  
-- Streamlit: http://localhost:8501  
-Use `ENV=development`, `LOG_LEVEL=INFO` (or `DEBUG`) in `.env` for logging.
-
-**Health check:** `GET /health` returns `status`, `model_loaded`, and `llm_configured` (whether an LLM API key is set).
+- **Compose** mounts `./models` and `./data` so a trained pipeline and CSV persist between runs. Pass your keys via `--env-file .env`.
+- **Health check:** `GET http://localhost:8000/health` returns `status`, `model_loaded`, and `llm_configured`.
+- **Optional API auth:** Set `API_KEY` or `LOANSENSE_API_KEY` in `.env` to require the `X-API-Key` header on `/score`, `/score-and-email`, `/generate-email`, and `/agent-pipeline`. If unset, those endpoints are open.
+- Optional in `.env`: `ENV=development`, `LOG_LEVEL=INFO` (or `DEBUG`) for structured logging.
 
 ## Testing
 
@@ -126,8 +156,9 @@ All tests use mocks for the LLM client, so no API key is required. An integratio
 
 ## Data
 
-- Place your loan dataset in `data/loan_data.csv` (or use the sample generation script).
-- Expected columns (adjust in `src/data/schema.py`): income, debt, employment_years, credit_score, and a target like `approved`.
+- **Sample data:** Training without `--data` uses **synthetic** data (see `src/data/load.py`). Debt is mostly 5–50% of income, with ~15% high-debt cases (up to 2× income) so the model sees deny examples. This is enough for a realistic demo but not for production.
+- **Real data:** For production or more realistic behavior, use your own CSV: place it at `data/loan_data.csv` and run `python scripts/train.py --data data/loan_data.csv`. Expected columns (adjust in `src/data/schema.py`): income, debt, employment_years, credit_score, loan_amount, savings_balance, approved.
+- **Guardrails:** To avoid obviously bad approvals (e.g. debt >> income or very low credit), **rule-based guardrails** run before the model: DTI > 50% or credit score < 400 always result in **denied** with a clear reason, even if the model would have approved. See `apply_guardrails()` in `src/models/predict.py`.
 
 ## Resume bullets (copy-paste)
 

@@ -17,7 +17,7 @@ import streamlit as st
 import pandas as pd
 
 from src.data.preprocess import preprocess_features
-from src.models.predict import load_pipeline, predict, predict_proba, explain_decision
+from src.models.predict import load_pipeline, predict, predict_proba, explain_decision, apply_guardrails
 
 MODEL_DIR = _root / "models"
 
@@ -229,10 +229,16 @@ if submitted:
             "savings_balance": savings_balance, "approved": 0,
         }])
         row = preprocess_features(row)
-        model, feature_cols = load_pipeline(MODEL_DIR)
-        prob = float(predict_proba(model, feature_cols, row)[0])
-        decision_int = int(predict(model, feature_cols, row)[0])
-        reason = explain_decision(row, decision_int)
+        guardrail_decision, guardrail_reason = apply_guardrails(row)
+        if guardrail_decision is not None:
+            prob = 0.0
+            decision_int = 0
+            reason = guardrail_reason or "Application does not meet guidelines."
+        else:
+            model, feature_cols = load_pipeline(MODEL_DIR)
+            prob = float(predict_proba(model, feature_cols, row)[0])
+            decision_int = int(predict(model, feature_cols, row)[0])
+            reason = explain_decision(row, decision_int)
         decision_label = "Approved" if decision_int == 1 else "Denied"
 
         st.session_state["last_decision"] = "approve" if decision_int == 1 else "deny"
@@ -273,31 +279,52 @@ has_key = bool(os.environ.get("OPENAI_API_KEY"))
 has_decision = st.session_state.get("last_decision") is not None
 
 if not has_key:
-    st.info("Set `OPENAI_API_KEY` in `.env` to generate emails.")
+    st.info("Set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` in `.env` to generate emails.")
 else:
     if has_decision:
-        # One dropdown + one button = no duplicate buttons
+        # Mode: single (email only or agent) or both for compare view
         email_mode = st.selectbox(
             "Action",
-            ["simple", "agent"],
-            format_func=lambda x: "Generate email only" if x == "simple" else "Generate email + agent pipeline (bias check, next-best-offer)",
+            ["simple", "agent", "compare"],
+            format_func=lambda x: {
+                "simple": "Generate email only",
+                "agent": "Generate email + agent pipeline",
+                "compare": "Generate both (compare side-by-side)",
+            }[x],
             key="email_mode_select",
         )
-        st.caption("**Agent:** OpenAI (gpt-4o-mini) — scores the email for bias; if denied, appends a next-best-offer recommendation.")
+        st.caption("**Agent:** LLM scores the email for bias; if denied, appends a next-best-offer. **Compare** generates both versions so you can see the difference.")
         if st.button("Generate", type="primary", key="email_generate_btn"):
             try:
                 d = st.session_state["last_decision"]
                 name = st.session_state.get("last_applicant_name", "Valued Customer")
                 reason = st.session_state.get("last_reason")
+                from src.llm.email import generate_customer_email
+                from src.agents.pipeline import run_agent_pipeline
                 if email_mode == "simple":
-                    from src.llm.email import generate_customer_email
                     email = generate_customer_email(d, name, reason=reason)
                     st.session_state["email_output"] = email
+                    st.session_state["email_simple"] = email
+                    st.session_state["email_agent"] = None
                     st.session_state["email_from_agent"] = False
                     st.session_state["email_meta"] = None
-                else:
-                    from src.agents.pipeline import run_agent_pipeline
+                elif email_mode == "agent":
                     result = run_agent_pipeline(d, name, reason=reason)
+                    st.session_state["email_output"] = result.email
+                    st.session_state["email_simple"] = None
+                    st.session_state["email_agent"] = result.email
+                    st.session_state["email_from_agent"] = True
+                    st.session_state["email_meta"] = {
+                        "bias_score": result.bias_score,
+                        "escalated": result.escalated,
+                        "next_best_offer": result.next_best_offer,
+                    }
+                else:
+                    # compare: generate both
+                    email_simple = generate_customer_email(d, name, reason=reason)
+                    result = run_agent_pipeline(d, name, reason=reason)
+                    st.session_state["email_simple"] = email_simple
+                    st.session_state["email_agent"] = result.email
                     st.session_state["email_output"] = result.email
                     st.session_state["email_from_agent"] = True
                     st.session_state["email_meta"] = {
@@ -308,13 +335,29 @@ else:
             except Exception as e:
                 st.error(str(e))
 
-        if st.session_state.get("email_output"):
+        # Compare view: side-by-side when both are available
+        if st.session_state.get("email_simple") is not None and st.session_state.get("email_agent") is not None:
+            st.subheader("Compare: Email only vs Email + agent")
+            col_left, col_right = st.columns(2)
+            with col_left:
+                st.caption("**Email only** (LLM-generated, no bias check or next-best-offer)")
+                st.text_area("Email only", value=st.session_state["email_simple"], height=220, key="email_compare_simple", label_visibility="collapsed")
+                st.download_button("Download as .txt", data=st.session_state["email_simple"], file_name="loansense_email_only.txt", mime="text/plain", key="dl_simple")
+            with col_right:
+                st.caption("**Email + agent** (bias-scored; if denied, next-best-offer appended)")
+                st.text_area("Email + agent", value=st.session_state["email_agent"], height=220, key="email_compare_agent", label_visibility="collapsed")
+                st.download_button("Download as .txt", data=st.session_state["email_agent"], file_name="loansense_email_with_agent.txt", mime="text/plain", key="dl_agent")
+            if st.session_state.get("email_meta"):
+                m = st.session_state["email_meta"]
+                st.info(f"**Agent pipeline:** Bias score **{m['bias_score']:.2f}** · Escalated: **{m['escalated']}**" + (f" · Next-best-offer appended in right column." if m.get("next_best_offer") else ""))
+        elif st.session_state.get("email_output"):
             if st.session_state.get("email_from_agent") and st.session_state.get("email_meta"):
                 m = st.session_state["email_meta"]
                 st.info(f"**Agent pipeline:** Bias score **{m['bias_score']:.2f}** (0–1, lower is safer). Escalated to human: **{m['escalated']}**. " + (f"Next-best-offer appended below." if m.get("next_best_offer") else "No next-best-offer (applicant approved)."))
                 if m.get("next_best_offer"):
                     st.caption(f"Recommendation added to email: *{m['next_best_offer']}*")
             st.text_area("Email", value=st.session_state["email_output"], height=200, key="email_display", label_visibility="collapsed")
+            st.download_button("Download email as .txt", data=st.session_state["email_output"], file_name="loansense_email.txt", mime="text/plain", key="dl_single")
     else:
         st.caption("Score an application above first, or use the manual form below.")
 
@@ -340,6 +383,7 @@ else:
                     st.error(str(e))
         if st.session_state.get("email_manual_output"):
             st.text_area("Email", value=st.session_state["email_manual_output"], height=180, key="email_manual_display", label_visibility="collapsed")
+            st.download_button("Download as .txt", data=st.session_state["email_manual_output"], file_name="loansense_email_manual.txt", mime="text/plain", key="dl_manual")
             if st.session_state.get("email_manual_meta"):
                 m = st.session_state["email_manual_meta"]
                 st.caption(f"Bias score: {m['bias_score']:.2f} · Escalated: {m['escalated']}")
