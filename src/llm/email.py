@@ -3,7 +3,9 @@
 import os
 from openai import OpenAI
 
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+def _client():
+    """Lazy client so modules can be imported in CI without OPENAI_API_KEY."""
+    return OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 
 def generate_customer_email(
@@ -32,7 +34,7 @@ Rules:
 - Keep the email to 2-4 sentences.
 - Sign off as "Loan Services Team"."""
 
-    resp = client.chat.completions.create(
+    resp = _client().chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.3,

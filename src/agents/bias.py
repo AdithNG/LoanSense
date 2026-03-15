@@ -3,7 +3,9 @@
 import os
 from openai import OpenAI
 
-client = OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+def _client():
+    """Lazy client so modules can be imported in CI without OPENAI_API_KEY."""
+    return OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
 
 # Threshold above which we escalate to human or send to stricter agent
 ESCALATE_THRESHOLD = 0.6  # 0-1 risk score
@@ -31,7 +33,7 @@ Reply with ONLY a single number between 0 and 1:
 
 Output only the number, no explanation."""
 
-    resp = client.chat.completions.create(
+    resp = _client().chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
         temperature=0,
