@@ -1,0 +1,10 @@
+.venv/
+venv/
+.env
+*.pyc
+__pycache__/
+.pytest_cache/
+*.joblib
+models/
+data/*.csv
+!data/.gitkeep
