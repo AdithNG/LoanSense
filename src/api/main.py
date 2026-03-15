@@ -1,0 +1,117 @@
+"""Simple deployment API: score, generate email, agent pipeline."""
+
+from pathlib import Path
+
+import pandas as pd
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
+from src.data.preprocess import preprocess_features
+from src.models.predict import load_pipeline, predict, predict_proba
+
+MODEL_DIR = Path(__file__).resolve().parent.parent.parent / "models"
+
+app = FastAPI(title="LoanSense API", description="Loan approval ML + LLM + agents")
+
+# Lazy-load pipeline
+_pipeline = None
+
+
+def get_pipeline():
+    global _pipeline
+    if _pipeline is None:
+        if not (MODEL_DIR / "pipeline.joblib").exists():
+            raise HTTPException(503, "Model not trained. Run: python scripts/train.py")
+        _pipeline = load_pipeline(MODEL_DIR)
+    return _pipeline
+
+
+class ScoreRequest(BaseModel):
+    income: float
+    debt: float
+    employment_years: int
+    credit_score: int
+    loan_amount: float = 50_000.0
+    savings_balance: float = 10_000.0
+
+
+class ScoreResponse(BaseModel):
+    approval_probability: float
+    decision: str  # "approved" | "denied"
+
+
+@app.post("/score", response_model=ScoreResponse)
+def score(req: ScoreRequest):
+    """Level 1: Score one loan application."""
+    row = pd.DataFrame([{
+        "income": req.income,
+        "debt": req.debt,
+        "employment_years": req.employment_years,
+        "credit_score": req.credit_score,
+        "loan_amount": req.loan_amount,
+        "savings_balance": req.savings_balance,
+        "approved": 0,
+    }])
+    row = preprocess_features(row)
+    model, feature_cols = get_pipeline()
+    prob = float(predict_proba(model, feature_cols, row)[0])
+    decision = int(predict(model, feature_cols, row)[0])
+    return ScoreResponse(
+        approval_probability=prob,
+        decision="approved" if decision == 1 else "denied",
+    )
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+# --- Level 2: LLM email ---
+class GenerateEmailRequest(BaseModel):
+    decision: str  # approved | denied
+    applicant_name: str = "Valued Customer"
+
+
+class GenerateEmailResponse(BaseModel):
+    email: str
+
+
+@app.post("/generate-email", response_model=GenerateEmailResponse)
+def generate_email(req: GenerateEmailRequest):
+    """Level 2: Generate customer email from decision (LLM)."""
+    try:
+        from src.llm.email import generate_customer_email
+        email = generate_customer_email(req.decision, req.applicant_name)
+        return GenerateEmailResponse(email=email)
+    except Exception as e:
+        raise HTTPException(500, str(e))
+
+
+# --- Level 3: Agent pipeline ---
+class AgentPipelineRequest(BaseModel):
+    decision: str
+    applicant_name: str = "Valued Customer"
+    include_next_best_offer: bool = True
+
+
+@app.post("/agent-pipeline")
+def agent_pipeline(req: AgentPipelineRequest):
+    """Level 3: Full pipeline with bias detection and optional next-best-offer."""
+    try:
+        from src.agents.pipeline import run_agent_pipeline
+        result = run_agent_pipeline(
+            req.decision,
+            req.applicant_name,
+            include_next_best_offer_on_deny=req.include_next_best_offer,
+        )
+        return {
+            "email": result.email,
+            "bias_score": result.bias_score,
+            "escalated": result.escalated,
+            "passed_tough_check": result.passed_tough_check,
+            "next_best_offer": result.next_best_offer,
+            "final_email_sent": result.final_email_sent,
+        }
+    except Exception as e:
+        raise HTTPException(500, str(e))
