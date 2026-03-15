@@ -111,6 +111,27 @@ st.markdown("""
     }
     label { font-weight: 500 !important; color: #334155 !important; font-size: 0.9rem !important; }
     
+    /* Captions and helper text: darker grey for better contrast */
+    [data-testid="stCaptionContainer"] { color: #475569 !important; }
+    [data-testid="stCaptionContainer"] p { color: #475569 !important; font-weight: 500 !important; }
+    .stCaptionContainer p { color: #475569 !important; font-weight: 500 !important; }
+    [data-testid="stSidebar"] [data-testid="stCaptionContainer"] p { color: #334155 !important; }
+    
+    /* Manual email expander: more visible (border + background) */
+    .manual-email-section [data-testid="stExpander"] { 
+        margin-top: 0.5rem !important; 
+        border: 1px solid #cbd5e1 !important; 
+        border-radius: 8px !important; 
+        background: #f8fafc !important;
+        overflow: hidden !important;
+    }
+    .manual-email-section [data-testid="stExpander"] > div:first-child { 
+        background: #f1f5f9 !important; 
+        padding: 0.6rem 1rem !important;
+        font-weight: 600 !important;
+        color: #0f172a !important;
+    }
+    
     /* Buttons */
     [data-testid="stFormSubmitButton"] button,
     button[kind="primary"] {
@@ -178,13 +199,17 @@ with st.sidebar:
     else:
         st.warning("No model yet")
     with st.expander("Train model", expanded=False):
+        data_csv = _root / "data" / "loan_data.csv"
+        use_real_data = data_csv.exists()
+        if use_real_data:
+            st.caption("Use **real data** (data/loan_data.csv) or synthetic below.")
         alg = st.selectbox(
             "Algorithm",
             ["gradient_boosting", "random_forest"],
             format_func=lambda x: "Gradient Boosting" if x == "gradient_boosting" else "Random Forest",
         )
         n_samples = st.slider("Sample size", 500, 5000, 2000, 500)
-        if st.button("Train", key="sidebar_train"):
+        if st.button("Train (synthetic)", key="sidebar_train_synth"):
             try:
                 with st.spinner("Training…"):
                     from src.data import load_sample_data, preprocess_features, prepare_splits
@@ -203,6 +228,27 @@ with st.sidebar:
                     st.caption("**Top features:** " + ", ".join(imp.head(3).index.tolist()))
             except Exception as e:
                 st.error(str(e))
+        if use_real_data and st.button("Train from data/loan_data.csv", key="sidebar_train_csv"):
+            try:
+                with st.spinner("Training on real data…"):
+                    from src.data import load_loan_data, preprocess_features, prepare_splits
+                    from src.models.train import train_model, evaluate_model, save_pipeline
+                    df = load_loan_data(str(data_csv))
+                    df = preprocess_features(df)
+                    train_df, val_df, test_df = prepare_splits(df, 0.8, 0.1, 0.1, seed=42)
+                    model, X_val, y_val, feature_cols = train_model(train_df, val_df, algorithm=alg, seed=42)
+                    X_test, y_test = test_df[feature_cols], test_df["approved"]
+                    metrics = evaluate_model(model, X_val, y_val, X_test, y_test)
+                    save_pipeline(model, feature_cols, metrics, MODEL_DIR)
+                st.success("Done")
+                st.caption(f"Val accuracy: {metrics['validation']['accuracy']:.2%} (real data)")
+                if hasattr(model, "feature_importances_"):
+                    imp = pd.Series(model.feature_importances_, index=feature_cols).sort_values(ascending=False)
+                    st.caption("**Top features:** " + ", ".join(imp.head(3).index.tolist()))
+            except Exception as e:
+                st.error(str(e))
+        if not use_real_data:
+            st.caption("Run `python scripts/download_loan_data.py` to fetch UCI Credit data, then re-open this panel.")
 
 # ---- Main: Score application ----
 st.markdown('<div class="section-card"><p class="section-title">Score application</p>', unsafe_allow_html=True)
@@ -267,7 +313,7 @@ if st.session_state.get("score_history"):
         hist = st.session_state["score_history"]
         df_hist = pd.DataFrame(hist)
         try:
-            st.dataframe(df_hist, use_container_width=True, hide_index=True)
+            st.dataframe(df_hist, width="stretch", hide_index=True)
         except TypeError:
             st.dataframe(df_hist, hide_index=True)
         approved = sum(1 for h in hist if h["decision"] == "Approved")
@@ -361,7 +407,11 @@ else:
     else:
         st.caption("Score an application above first, or use the manual form below.")
 
-    with st.expander("Generate email manually (no score)"):
+    st.markdown("---")
+    st.markdown("#### 📧 Generate email manually (no score)")
+    st.caption("Use this when you want to generate an email without scoring an application first.")
+    st.markdown('<div class="manual-email-section">', unsafe_allow_html=True)
+    with st.expander("Open manual options", expanded=True):
         with st.form("email_manual"):
             d_manual = st.selectbox("Decision", ["approve", "deny"], format_func=lambda x: "Approve" if x == "approve" else "Deny")
             name_manual = st.text_input("Applicant name", value="Jane Doe")
@@ -389,4 +439,5 @@ else:
                 st.caption(f"Bias score: {m['bias_score']:.2f} · Escalated: {m['escalated']}")
                 if m.get("next_best_offer"):
                     st.caption(f"Next best offer: {m['next_best_offer']}")
+    st.markdown("</div>", unsafe_allow_html=True)
     st.markdown("</div>", unsafe_allow_html=True)

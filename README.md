@@ -157,7 +157,13 @@ All tests use mocks for the LLM client, so no API key is required. An integratio
 ## Data
 
 - **Sample data:** Training without `--data` uses **synthetic** data (see `src/data/load.py`). Debt is mostly 5–50% of income, with ~15% high-debt cases (up to 2× income) so the model sees deny examples. This is enough for a realistic demo but not for production.
-- **Real data:** For production or more realistic behavior, use your own CSV: place it at `data/loan_data.csv` and run `python scripts/train.py --data data/loan_data.csv`. Expected columns (adjust in `src/data/schema.py`): income, debt, employment_years, credit_score, loan_amount, savings_balance, approved.
+- **Real data (UCI Credit):** For a public dataset, use the included download script (maps [UCI Credit Approval](https://archive.ics.uci.edu/ml/datasets/credit+approval) to the LoanSense schema):
+  ```bash
+  python scripts/download_loan_data.py
+  python scripts/train.py --data data/loan_data.csv
+  ```
+  This fetches ~690 anonymized credit records, maps them to `income`, `debt`, `employment_years`, `credit_score`, `loan_amount`, `savings_balance`, `approved`, and saves `data/loan_data.csv`. You can then train from the UI (sidebar: "Train from CSV") or CLI as above.
+- **Your own CSV:** Place any CSV at `data/loan_data.csv` with columns: income, debt, employment_years, credit_score, loan_amount, savings_balance, approved. Adjust `src/data/schema.py` if your column names differ.
 - **Guardrails:** To avoid obviously bad approvals (e.g. debt >> income or very low credit), **rule-based guardrails** run before the model: DTI > 50% or credit score < 400 always result in **denied** with a clear reason, even if the model would have approved. See `apply_guardrails()` in `src/models/predict.py`.
 
 ## Resume bullets (copy-paste)
