@@ -88,7 +88,16 @@ Interactive API docs: **http://127.0.0.1:8000/docs** — try `POST /score`, `POS
 streamlit run app.py
 ```
 
-Opens a browser: score an application, and (if `OPENAI_API_KEY` is set) generate customer emails or run the full agent pipeline.
+Opens a browser: **train** (sample data), **score** an application, and (if `OPENAI_API_KEY` is set) generate customer emails or run the full agent pipeline.
+
+### Docker (optional)
+
+```bash
+docker build -t loansense .
+docker run -p 8501:8501 --env-file .env loansense
+```
+
+Then open http://localhost:8501. To use your own API key, pass `--env-file .env` or `-e OPENAI_API_KEY=sk-...`.
 
 ## Testing
 
