@@ -109,6 +109,31 @@ st.markdown("""
         border-color: #2563eb !important;
         box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.15) !important;
     }
+    
+    /* Action dropdown: subtle darker background + shadow so it looks clickable */
+    [data-testid="stSelectbox"] {
+        background: #e2e8f0 !important;
+        border-radius: 8px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1) !important;
+    }
+    [data-testid="stSelectbox"] > div,
+    [data-testid="stSelectbox"] input {
+        background: #e2e8f0 !important;
+        color: #0f172a !important;
+    }
+    
+    /* Generated email text areas: look like scrollable content boxes */
+    [data-testid="stTextArea"] {
+        background: #f1f5f9 !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 8px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08) !important;
+    }
+    [data-testid="stTextArea"] textarea {
+        background: #f8fafc !important;
+        border: none !important;
+    }
+    
     label { font-weight: 500 !important; color: #334155 !important; font-size: 0.9rem !important; }
     
     /* Captions and helper text: darker grey for better contrast */
@@ -328,7 +353,6 @@ if not has_key:
     st.info("Set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` in `.env` to generate emails.")
 else:
     if has_decision:
-        # Mode: single (email only or agent) or both for compare view
         email_mode = st.selectbox(
             "Action",
             ["simple", "agent", "compare"],
