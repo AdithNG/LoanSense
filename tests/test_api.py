@@ -34,6 +34,7 @@ def test_score_requires_trained_model():
         data = r.json()
         assert "approval_probability" in data
         assert data["decision"] in ("approved", "denied")
+        assert "reason" in data
 
 
 @patch("src.api.main.get_pipeline")
@@ -58,5 +59,6 @@ def test_score_returns_decision(mock_get_pipeline, train_val_test):
     assert r.status_code == 200
     data = r.json()
     assert "approval_probability" in data
+    assert "reason" in data
     assert data["decision"] in ("approved", "denied")
     assert 0 <= data["approval_probability"] <= 1

@@ -43,11 +43,12 @@ class ScoreRequest(BaseModel):
 class ScoreResponse(BaseModel):
     approval_probability: float
     decision: str  # "approved" | "denied"
+    reason: str  # short explanation for LLM/email
 
 
 @app.post("/score", response_model=ScoreResponse)
 def score(req: ScoreRequest):
-    """Level 1: Score one loan application."""
+    """Level 1: Score one loan application. Returns decision and reason for downstream email."""
     row = pd.DataFrame([{
         "income": req.income,
         "debt": req.debt,
@@ -61,9 +62,11 @@ def score(req: ScoreRequest):
     model, feature_cols = get_pipeline()
     prob = float(predict_proba(model, feature_cols, row)[0])
     decision_int = int(predict(model, feature_cols, row)[0])
+    reason = explain_decision(row, decision_int)
     return ScoreResponse(
         approval_probability=prob,
         decision="approved" if decision_int == 1 else "denied",
+        reason=reason,
     )
 
 

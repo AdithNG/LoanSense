@@ -116,6 +116,12 @@ All tests use mocks for the OpenAI API, so no API key is required for tests. Lev
 - Place your loan dataset in `data/loan_data.csv` (or use the sample generation script).
 - Expected columns (adjust in `src/data/schema.py`): income, debt, employment_years, credit_score, and a target like `approved`.
 
+## Resume bullets (copy-paste)
+
+- Built an end-to-end **loan approval AI system**: ML (Gradient Boosting / Random Forest) with 80/10/10 train/validation/test splits, feature engineering, and deployment via REST API and Streamlit UI.
+- Integrated **LLMs** to turn model decisions into customer-facing emails (with explainable reasons), then added **guardrails**: bias-detection agents, escalation to human review, and next-best-offer for denied applicants.
+- Demonstrated **deterministic vs probabilistic** design: interpretable ML scoring plus safe use of LLMs with bias scoring and agent pipelines; wrote tests and CI (pytest, GitHub Actions).
+
 ## License
 
 MIT

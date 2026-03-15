@@ -21,6 +21,10 @@ from src.models.predict import load_pipeline, predict, predict_proba, explain_de
 
 MODEL_DIR = _root / "models"
 
+# Persist last N scores for dashboard (session only)
+if "score_history" not in st.session_state:
+    st.session_state["score_history"] = []
+
 st.set_page_config(page_title="LoanSense", page_icon="📋", layout="centered")
 st.title("📋 LoanSense")
 st.caption("Loan approval: score → email with reason")
@@ -53,6 +57,9 @@ with st.sidebar:
                     save_pipeline(model, feature_cols, metrics, MODEL_DIR)
                 st.success("Done")
                 st.caption(f"Val accuracy: {metrics['validation']['accuracy']:.2%}")
+                if hasattr(model, "feature_importances_"):
+                    imp = pd.Series(model.feature_importances_, index=feature_cols).sort_values(ascending=False)
+                    st.caption("**Top features:** " + ", ".join(imp.head(3).index.tolist()))
             except Exception as e:
                 st.error(str(e))
 
@@ -94,6 +101,10 @@ if submitted:
         # New score → clear previous email so we don't show stale content
         for key in ("email_output", "email_from_agent", "email_meta"):
             st.session_state.pop(key, None)
+        # Append to dashboard history (keep last 20)
+        st.session_state["score_history"] = (
+            [{"applicant": applicant_name, "decision": decision_label, "prob": prob, "reason": reason}] + st.session_state["score_history"]
+        )[:20]
 
         # Result card
         col_a, col_b = st.columns(2)
@@ -105,6 +116,15 @@ if submitted:
             reason_display = reason if len(reason) <= 60 else reason[:57] + "..."
             st.caption("**Reason for email**")
             st.write(reason_display)
+
+# ----- Dashboard: recent scores -----
+if st.session_state.get("score_history"):
+    with st.expander("📊 Dashboard — recent scores", expanded=False):
+        hist = st.session_state["score_history"]
+        df_hist = pd.DataFrame(hist)
+        st.dataframe(df_hist, use_container_width=True, hide_index=True)
+        approved = sum(1 for h in hist if h["decision"] == "Approved")
+        st.caption(f"Approval rate (this session): {approved}/{len(hist)} = {approved/len(hist):.0%}")
 
 # ----- Generate email (only if we have a decision or API key) -----
 st.header("2. Generate customer email")
