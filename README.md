@@ -64,6 +64,14 @@ uvicorn src.api.main:app --reload
 # POST /score, POST /generate-email, POST /agent-pipeline
 ```
 
+### Web UI (Streamlit)
+
+```bash
+streamlit run app.py
+```
+
+Opens a browser: score an application, and (if `OPENAI_API_KEY` is set) generate customer emails or run the full agent pipeline.
+
 ## Testing
 
 Run the test suite (from project root, with `PYTHONPATH` set as above):
