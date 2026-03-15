@@ -1,11 +1,8 @@
 """Level 3: Next-best-offer agent for denied applicants (e.g. recommend alternative product)."""
 
 import os
-from openai import OpenAI
 
-def _client():
-    """Lazy client so modules can be imported in CI without OPENAI_API_KEY."""
-    return OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+from src.llm.client import completion
 
 
 def get_next_best_offer(
@@ -16,15 +13,14 @@ def get_next_best_offer(
     """
     Recommend a next-best offer (e.g. smaller loan, different product) to keep customer engaged.
     """
-    model = model or os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
     prompt = f"""You are a financial product recommender. Given this context:
 {context}
 
 Suggest one short, specific next-best offer for {applicant_name} (e.g. smaller loan amount, secured loan, or savings product). Keep it to 1-2 sentences, professional and helpful. Do not be discriminatory or biased."""
 
-    resp = _client().chat.completions.create(
+    return completion(
+        prompt,
         model=model,
-        messages=[{"role": "user", "content": prompt}],
         temperature=0.3,
+        event_name="next_best_offer",
     )
-    return (resp.choices[0].message.content or "").strip()

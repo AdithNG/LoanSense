@@ -1,5 +1,6 @@
 """Simple deployment API: score, generate email, agent pipeline."""
 
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -125,7 +126,14 @@ def score_and_email(req: ScoreAndEmailRequest):
 
 @app.get("/health")
 def health():
-    return {"status": "ok"}
+    """Model loaded and LLM key configured (optional for Level 1-only)."""
+    model_loaded = (MODEL_DIR / "pipeline.joblib").exists()
+    llm_configured = bool(os.environ.get("OPENAI_API_KEY") or os.environ.get("ANTHROPIC_API_KEY"))
+    return {
+        "status": "ok",
+        "model_loaded": model_loaded,
+        "llm_configured": llm_configured,
+    }
 
 
 # --- Level 2: LLM email ---

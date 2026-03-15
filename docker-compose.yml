@@ -1,0 +1,29 @@
+# LoanSense: API + Streamlit UI. Run: docker compose up
+services:
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    command: ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    env_file: .env
+    environment:
+      - ENV=development
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+
+  app:
+    build: .
+    ports:
+      - "8501:8501"
+    command: ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    env_file: .env
+    environment:
+      - ENV=development
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+    depends_on:
+      - api

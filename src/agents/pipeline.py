@@ -6,6 +6,7 @@ from typing import Literal
 from src.llm.email import generate_customer_email
 from src.agents.bias import bias_score_email, should_escalate, ESCALATE_THRESHOLD
 from src.agents.next_best_offer import get_next_best_offer
+from src.utils.log import log_llm_event
 
 
 @dataclass
@@ -33,10 +34,12 @@ def run_agent_pipeline(
     4. Else: optionally run tougher bias check (strict=True), then if still ok, optionally
        add next-best-offer for deny and return final email.
     """
+    log_llm_event("agent_pipeline_start", decision=decision.lower())
     email = generate_customer_email(decision, applicant_name, reason=reason)
     bias_score = bias_score_email(email)
 
     if should_escalate(bias_score, bias_threshold):
+        log_llm_event("agent_pipeline_end", escalated=True, bias_score=bias_score)
         return AgentPipelineResult(
             email=email,
             bias_score=bias_score,
@@ -50,6 +53,7 @@ def run_agent_pipeline(
     tough_score = bias_score_email(email, strict=True)
     passed_tough = not should_escalate(tough_score, bias_threshold)
     if not passed_tough:
+        log_llm_event("agent_pipeline_end", escalated=True, bias_score=bias_score, passed_tough_check=False)
         return AgentPipelineResult(
             email=email,
             bias_score=bias_score,
@@ -69,6 +73,7 @@ def run_agent_pipeline(
     if next_best_offer:
         final_email = f"{email}\n\nWe also have a recommendation for you: {next_best_offer}"
 
+    log_llm_event("agent_pipeline_end", escalated=False, bias_score=bias_score, final_email_sent=True)
     return AgentPipelineResult(
         email=final_email,
         bias_score=bias_score,

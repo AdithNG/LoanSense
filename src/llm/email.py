@@ -1,11 +1,8 @@
 """Level 2: LLM generates customer email from ML decision (approve/deny). Adds probabilistic component."""
 
 import os
-from openai import OpenAI
 
-def _client():
-    """Lazy client so modules can be imported in CI without OPENAI_API_KEY."""
-    return OpenAI(api_key=os.environ.get("OPENAI_API_KEY"))
+from src.llm.client import completion
 
 
 def generate_customer_email(
@@ -15,7 +12,6 @@ def generate_customer_email(
     model: str | None = None,
 ) -> str:
     """Generate a professional, non-discriminatory email to the customer. Optionally include the reason for the decision."""
-    model = model or os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
     decision = decision.lower()
     if decision not in ("approve", "approved", "deny", "denied"):
         raise ValueError("decision must be approve/deny (or approved/denied)")
@@ -34,9 +30,9 @@ Rules:
 - Keep the email to 2-4 sentences.
 - Sign off as "Loan Services Team"."""
 
-    resp = _client().chat.completions.create(
+    return completion(
+        prompt,
         model=model,
-        messages=[{"role": "user", "content": prompt}],
         temperature=0.3,
+        event_name="email_generated",
     )
-    return (resp.choices[0].message.content or "").strip()

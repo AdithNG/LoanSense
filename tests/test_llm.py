@@ -1,6 +1,6 @@
-"""Tests for LLM email generation (mocked OpenAI)."""
+"""Tests for LLM email generation (mocked completion client)."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -8,32 +8,26 @@ from src.llm.email import generate_customer_email
 
 
 def test_generate_customer_email_approve():
-    mock_content = MagicMock()
-    mock_content.content = "Dear Customer, Your loan has been approved. Best, Loan Services Team"
-    with patch("src.llm.email._client") as mock_client_fn:
-        mock_client_fn.return_value.chat.completions.create.return_value.choices = [MagicMock(message=mock_content)]
+    with patch("src.llm.email.completion") as mock_completion:
+        mock_completion.return_value = "Dear Customer, Your loan has been approved. Best, Loan Services Team"
         result = generate_customer_email("approve", "Jane Doe")
     assert "approved" in result.lower() or "approve" in result.lower()
     assert "Jane" in result or "Customer" in result
 
 
 def test_generate_customer_email_deny():
-    mock_content = MagicMock()
-    mock_content.content = "Dear Customer, We are unable to approve your loan. Please contact us. Loan Services Team"
-    with patch("src.llm.email._client") as mock_client_fn:
-        mock_client_fn.return_value.chat.completions.create.return_value.choices = [MagicMock(message=mock_content)]
+    with patch("src.llm.email.completion") as mock_completion:
+        mock_completion.return_value = "Dear Customer, We are unable to approve your loan. Please contact us. Loan Services Team"
         result = generate_customer_email("deny", "Bob")
     assert "Bob" in result or "Customer" in result
 
 
 def test_generate_customer_email_approved_denied_aliases():
-    mock_content = MagicMock()
-    mock_content.content = "Email body"
-    with patch("src.llm.email._client") as mock_client_fn:
-        mock_client_fn.return_value.chat.completions.create.return_value.choices = [MagicMock(message=mock_content)]
+    with patch("src.llm.email.completion") as mock_completion:
+        mock_completion.return_value = "Email body"
         generate_customer_email("approved", "X")
         generate_customer_email("denied", "Y")
-    assert mock_client_fn.return_value.chat.completions.create.call_count == 2
+    assert mock_completion.call_count == 2
 
 
 def test_generate_customer_email_invalid_decision():
@@ -42,11 +36,10 @@ def test_generate_customer_email_invalid_decision():
 
 
 def test_generate_customer_email_with_reason():
-    mock_content = MagicMock()
-    mock_content.content = "Dear Jane, We could not approve your loan due to your debt-to-income ratio. Loan Services Team"
-    with patch("src.llm.email._client") as mock_client_fn:
-        mock_client_fn.return_value.chat.completions.create.return_value.choices = [MagicMock(message=mock_content)]
+    with patch("src.llm.email.completion") as mock_completion:
+        mock_completion.return_value = "Dear Jane, We could not approve your loan due to your debt-to-income ratio. Loan Services Team"
         result = generate_customer_email("deny", "Jane", reason="debt-to-income ratio above our guideline")
     assert "Jane" in result or "Customer" in result
-    call_args = mock_client_fn.return_value.chat.completions.create.call_args
-    assert "debt-to-income ratio" in call_args.kwargs["messages"][0]["content"]
+    call_args = mock_completion.call_args
+    prompt = call_args[0][0] if call_args[0] else call_args.kwargs.get("prompt", "")
+    assert "debt-to-income ratio" in prompt

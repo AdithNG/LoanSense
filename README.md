@@ -11,9 +11,10 @@ LoanSense/
 ├── src/
 │   ├── data/              # Load CSV/sample, preprocess, feature engineering
 │   ├── models/            # Train (GB/RF), evaluate, predict, save pipeline
-│   ├── llm/               # LLM customer email from approve/deny
+│   ├── llm/               # LLM client (OpenAI/Anthropic), email generation
 │   ├── agents/            # Bias detection, next-best-offer, pipeline
-│   └── api/               # FastAPI: /score, /generate-email, /agent-pipeline
+│   ├── utils/             # Structured logging (LOG_LEVEL, ENV)
+│   └── api/               # FastAPI: /score, /generate-email, /agent-pipeline, /health
 ├── tests/                 # Pytest suite (data, models, llm, agents, API)
 ├── data/                  # Optional: loan_data.csv
 └── models/                # Saved pipeline (after train)
@@ -27,7 +28,7 @@ LoanSense/
 | **2. Intermediate** | LLM takes the ML decision and an optional **reason** (from the model/features) and generates a personalized email explaining the outcome (adds probabilistic component). |
 | **3. Advanced** | Agent detects bias/discrimination in the email → scores it → escalates to human or re-runs through a stricter agent; optional next-best-offer agent for denied applicants. |
 
-**Agent / LLM:** All LLM calls use **OpenAI** (default model: `gpt-4o-mini`, overridable via `OPENAI_MODEL` in `.env`). The “agent pipeline” is three steps: (1) generate customer email, (2) **bias agent** scores that email for discrimination/unprofessional content and can escalate to human, (3) for **denied** applicants a **next-best-offer agent** suggests an alternative (e.g. smaller loan) and appends it to the email. With “Generate email only” you get step 1 only; with “agent pipeline” you get all three.
+**Agent / LLM:** LLM calls go through a unified client that supports **OpenAI** (default) or **Anthropic** via `LLM_PROVIDER=openai|anthropic` in `.env`; set `OPENAI_API_KEY` and/or `ANTHROPIC_API_KEY` accordingly. Default models: `gpt-4o-mini` (OpenAI), `claude-3-5-sonnet-20241022` (Anthropic). The client uses retries with backoff and structured logging (e.g. `email_generated`, `bias_score`, `escalated`). The “agent pipeline” is three steps: (1) generate customer email, (2) **bias agent** scores that email and can escalate to human, (3) for **denied** applicants a **next-best-offer agent** suggests an alternative and appends it to the email.
 
 ## Skills demonstrated
 
@@ -94,14 +95,24 @@ streamlit run app.py
 
 Opens a browser: **train** (sample data), **score** an application, and (if `OPENAI_API_KEY` is set) generate customer emails or run the full agent pipeline.
 
-### Docker (optional)
+### Docker and Docker Compose
 
+**Single container (Streamlit only):**
 ```bash
 docker build -t loansense .
 docker run -p 8501:8501 --env-file .env loansense
 ```
+Open http://localhost:8501.
 
-Then open http://localhost:8501. To use your own API key, pass `--env-file .env` or `-e OPENAI_API_KEY=sk-...`.
+**API + Streamlit together (Docker Compose):**
+```bash
+docker compose up --build
+```
+- API: http://localhost:8000 (docs at /docs)  
+- Streamlit: http://localhost:8501  
+Use `ENV=development`, `LOG_LEVEL=INFO` (or `DEBUG`) in `.env` for logging.
+
+**Health check:** `GET /health` returns `status`, `model_loaded`, and `llm_configured` (whether an LLM API key is set).
 
 ## Testing
 
@@ -111,7 +122,7 @@ Run the test suite (from project root, with `PYTHONPATH` set as above):
 python -m pytest tests/ -v
 ```
 
-All tests use mocks for the OpenAI API, so no API key is required for tests. Level 2/3 scripts require a valid `OPENAI_API_KEY` in `.env`.
+All tests use mocks for the LLM client, so no API key is required. An integration test (`tests/test_integration.py`) runs the full flow (score → email → agent pipeline) with mocked completions. Level 2/3 scripts require a valid `OPENAI_API_KEY` or `ANTHROPIC_API_KEY` in `.env`.
 
 ## Data
 
