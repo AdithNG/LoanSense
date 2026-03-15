@@ -17,11 +17,12 @@ def main():
     p = argparse.ArgumentParser(description="Generate customer email from loan decision (LLM)")
     p.add_argument("--decision", choices=["approve", "deny", "approved", "denied"], required=True)
     p.add_argument("--applicant_name", type=str, default="Valued Customer")
+    p.add_argument("--reason", type=str, default="", help="Reason for decision (e.g. from explain_decision)")
     args = p.parse_args()
     if not os.environ.get("OPENAI_API_KEY"):
         print("Set OPENAI_API_KEY in .env or environment.")
         return
-    email = generate_customer_email(args.decision, args.applicant_name)
+    email = generate_customer_email(args.decision, args.applicant_name, reason=args.reason or None)
     print(email)
 
 

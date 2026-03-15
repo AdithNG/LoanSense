@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from src.models.train import train_model, evaluate_model, save_pipeline
-from src.models.predict import load_pipeline, predict, predict_proba
+from src.models.predict import load_pipeline, predict, predict_proba, explain_decision
 from src.data.preprocess import get_feature_columns_for_model
 
 
@@ -78,3 +78,21 @@ def test_save_and_load_pipeline(train_val_test, tmp_path):
     with open(tmp_path / "metrics.json") as f:
         m = json.load(f)
     assert "validation" in m
+
+
+def test_explain_decision_denied_high_dti():
+    row = pd.DataFrame([{
+        "income": 50_000, "debt": 30_000, "employment_years": 1,
+        "credit_score": 500, "dti_ratio": 0.6,
+    }])
+    reason = explain_decision(row, 0)
+    assert "debt-to-income" in reason or "application" in reason.lower()
+
+
+def test_explain_decision_approved():
+    row = pd.DataFrame([{
+        "income": 80_000, "debt": 10_000, "employment_years": 5,
+        "credit_score": 720, "dti_ratio": 0.125,
+    }])
+    reason = explain_decision(row, 1)
+    assert len(reason) > 0

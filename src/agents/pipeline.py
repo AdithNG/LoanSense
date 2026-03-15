@@ -22,17 +22,18 @@ def run_agent_pipeline(
     decision: Literal["approve", "deny", "approved", "denied"],
     applicant_name: str,
     *,
+    reason: str | None = None,
     bias_threshold: float = ESCALATE_THRESHOLD,
     include_next_best_offer_on_deny: bool = True,
 ) -> AgentPipelineResult:
     """
-    1. Generate email from ML decision (LLM).
+    1. Generate email from ML decision (LLM), optionally including reason.
     2. Run bias detection agent -> score.
     3. If score >= threshold: escalate to human (we don't send; return escalated=True).
     4. Else: optionally run tougher bias check (strict=True), then if still ok, optionally
        add next-best-offer for deny and return final email.
     """
-    email = generate_customer_email(decision, applicant_name)
+    email = generate_customer_email(decision, applicant_name, reason=reason)
     bias_score = bias_score_email(email)
 
     if should_escalate(bias_score, bias_threshold):

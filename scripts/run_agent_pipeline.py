@@ -17,6 +17,7 @@ def main():
     p = argparse.ArgumentParser(description="Run agent pipeline: email + bias detection + next-best-offer")
     p.add_argument("--decision", choices=["approve", "deny", "approved", "denied"], required=True)
     p.add_argument("--applicant_name", type=str, default="Valued Customer")
+    p.add_argument("--reason", type=str, default="", help="Reason for decision (e.g. from score + explain_decision)")
     p.add_argument("--no-next-best-offer", action="store_true", help="Skip next-best-offer for denied")
     args = p.parse_args()
     if not os.environ.get("OPENAI_API_KEY"):
@@ -25,6 +26,7 @@ def main():
     result = run_agent_pipeline(
         args.decision,
         args.applicant_name,
+        reason=args.reason or None,
         include_next_best_offer_on_deny=not args.no_next_best_offer,
     )
     print("Bias score:", result.bias_score)

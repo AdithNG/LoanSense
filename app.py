@@ -53,9 +53,10 @@ with st.expander("Train or retrain the approval model (sample data)", expanded=F
         except Exception as e:
             st.error(str(e))
 
-# Level 1: Score
+# Level 1: Score (connected to Level 2/3: ML decision → LLM email)
 st.header("Score an application")
 with st.form("score_form"):
+    applicant_name = st.text_input("Applicant name", value="Jane Doe", help="Used when generating the customer email.")
     income = st.number_input("Annual income ($)", min_value=0, value=50_000, step=1000)
     debt = st.number_input("Existing debt ($)", min_value=0, value=10_000, step=500)
     employment_years = st.number_input("Years employed", min_value=0, value=5, step=1)
@@ -66,7 +67,7 @@ with st.form("score_form"):
 
 if submitted:
     if not (MODEL_DIR / "pipeline.joblib").exists():
-        st.error("Model not trained. Run: `python scripts/train.py`")
+        st.error("Model not trained. Run: `python scripts/train.py` or train above.")
     else:
         row = pd.DataFrame([{
             "income": income, "debt": debt, "employment_years": employment_years,
@@ -76,29 +77,67 @@ if submitted:
         row = preprocess_features(row)
         model, feature_cols = load_pipeline(MODEL_DIR)
         prob = float(predict_proba(model, feature_cols, row)[0])
-        decision = "Approved" if predict(model, feature_cols, row)[0] == 1 else "Denied"
-        st.metric("Decision", decision)
+        decision_int = int(predict(model, feature_cols, row)[0])
+        from src.models.predict import explain_decision
+        reason = explain_decision(row, decision_int)
+        decision_label = "Approved" if decision_int == 1 else "Denied"
+        st.metric("Decision", decision_label)
         st.progress(prob)
         st.caption(f"Approval probability: {prob:.1%}")
+        st.caption(f"Reason (for email): {reason}")
+        # Store for "Generate email" so the next section uses this decision
+        st.session_state["last_decision"] = "approve" if decision_int == 1 else "deny"
+        st.session_state["last_reason"] = reason
+        st.session_state["last_applicant_name"] = applicant_name
 
-# Level 2 / 3: Email & agent pipeline (optional, needs OPENAI_API_KEY)
+# Level 2 / 3: Generate email from ML decision (or manual fallback)
 st.divider()
 st.header("Generate customer email (Level 2/3)")
 import os
 if not os.environ.get("OPENAI_API_KEY"):
     st.info("Set OPENAI_API_KEY in .env to use email generation and agent pipeline.")
 else:
+    # If we have a decision from Score above, offer one-click "Generate email for this decision"
+    if st.session_state.get("last_decision") is not None:
+        st.success("Use the decision from the score above to generate the email.")
+        if st.button("Generate email for this applicant (using ML decision + reason)"):
+            try:
+                from src.llm.email import generate_customer_email
+                d = st.session_state["last_decision"]
+                name = st.session_state.get("last_applicant_name", "Valued Customer")
+                reason = st.session_state.get("last_reason")
+                email = generate_customer_email(d, name, reason=reason)
+                st.text_area("Email", value=email, height=200, key="email_from_score")
+            except Exception as e:
+                st.error(str(e))
+        if st.button("Run full agent pipeline (bias check + next-best-offer if denied)"):
+            try:
+                from src.agents.pipeline import run_agent_pipeline
+                d = st.session_state["last_decision"]
+                name = st.session_state.get("last_applicant_name", "Valued Customer")
+                reason = st.session_state.get("last_reason")
+                result = run_agent_pipeline(d, name, reason=reason)
+                st.write("**Bias score:**", result.bias_score)
+                st.write("**Escalated to human:**", result.escalated)
+                if result.next_best_offer:
+                    st.write("**Next best offer:**", result.next_best_offer)
+                st.text_area("Email", value=result.email, height=200, key="email_agent")
+            except Exception as e:
+                st.error(str(e))
+        st.caption("Or use the form below to generate an email for a different decision (e.g. manual).")
     with st.form("email_form"):
-        decision = st.selectbox("Decision", ["approve", "deny"], format_func=lambda x: "Approve" if x == "approve" else "Deny")
-        applicant_name = st.text_input("Applicant name", value="Jane Doe")
+        decision_manual = st.selectbox("Decision", ["approve", "deny"], format_func=lambda x: "Approve" if x == "approve" else "Deny")
+        applicant_name_manual = st.text_input("Applicant name", value="Jane Doe")
+        reason_manual = st.text_input("Reason (optional)", value="", placeholder="e.g. strong credit profile; favorable debt-to-income ratio")
         use_agent = st.checkbox("Run full agent pipeline (bias check + next-best-offer for deny)", value=False)
-        email_submitted = st.form_submit_button("Generate")
+        email_submitted = st.form_submit_button("Generate email")
 
     if email_submitted:
         try:
+            reason_val = reason_manual.strip() or None
             if use_agent:
                 from src.agents.pipeline import run_agent_pipeline
-                result = run_agent_pipeline(decision, applicant_name)
+                result = run_agent_pipeline(decision_manual, applicant_name_manual, reason=reason_val)
                 st.write("**Bias score:**", result.bias_score)
                 st.write("**Escalated to human:**", result.escalated)
                 if result.next_best_offer:
@@ -106,7 +145,7 @@ else:
                 st.text_area("Email", value=result.email, height=200)
             else:
                 from src.llm.email import generate_customer_email
-                email = generate_customer_email(decision, applicant_name)
+                email = generate_customer_email(decision_manual, applicant_name_manual, reason=reason_val)
                 st.text_area("Email", value=email, height=200)
         except Exception as e:
             st.error(str(e))

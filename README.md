@@ -1,6 +1,6 @@
 # LoanSense
 
-A three-level AI loan approval project: **ML scoring** → **LLM email automation** → **AI agents with guardrails** (bias detection, next-best-offer). Built to showcase production-ready AI skills for recruiters.
+A three-level AI loan approval project: **ML scoring** → **LLM email (with reason)** → **AI agents with guardrails** (bias detection, next-best-offer). The ML decision and a short reason (e.g. debt-to-income, credit score) are passed to the LLM so the customer email explains why they were approved or denied. Built to showcase production-ready AI skills for recruiters.
 
 ## Project structure
 
@@ -24,7 +24,7 @@ LoanSense/
 | Level | What it does |
 |-------|----------------|
 | **1. Beginner** | Gradient Boosting (and Random Forest) model for approve/deny; train/validation/test splits; feature engineering; simple deployment API. |
-| **2. Intermediate** | LLM takes the ML decision and generates a personalized email to the customer (adds probabilistic component). |
+| **2. Intermediate** | LLM takes the ML decision and an optional **reason** (from the model/features) and generates a personalized email explaining the outcome (adds probabilistic component). |
 | **3. Advanced** | Agent detects bias/discrimination in the email → scores it → escalates to human or re-runs through a stricter agent; optional next-best-offer agent for denied applicants. |
 
 ## Skills demonstrated
@@ -80,7 +80,9 @@ python scripts/run_agent_pipeline.py --decision deny --applicant_name "Jane Doe"
 uvicorn src.api.main:app --reload
 ```
 
-Interactive API docs: **http://127.0.0.1:8000/docs** — try `POST /score`, `POST /generate-email`, `POST /agent-pipeline`.
+Interactive API docs: **http://127.0.0.1:8000/docs**
+
+**Connected flow:** `POST /score-and-email` — send application + applicant name; get ML decision, reason, and LLM-generated email in one call (optionally with agent pipeline).
 
 ### Web UI (Streamlit)
 

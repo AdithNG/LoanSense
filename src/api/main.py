@@ -12,7 +12,7 @@ _load_env = Path(__file__).resolve().parent.parent.parent / ".env"
 load_dotenv(_load_env, override=True)
 
 from src.data.preprocess import preprocess_features
-from src.models.predict import load_pipeline, predict, predict_proba
+from src.models.predict import load_pipeline, predict, predict_proba, explain_decision
 
 MODEL_DIR = Path(__file__).resolve().parent.parent.parent / "models"
 
@@ -60,11 +60,64 @@ def score(req: ScoreRequest):
     row = preprocess_features(row)
     model, feature_cols = get_pipeline()
     prob = float(predict_proba(model, feature_cols, row)[0])
-    decision = int(predict(model, feature_cols, row)[0])
+    decision_int = int(predict(model, feature_cols, row)[0])
     return ScoreResponse(
         approval_probability=prob,
-        decision="approved" if decision == 1 else "denied",
+        decision="approved" if decision_int == 1 else "denied",
     )
+
+
+class ScoreAndEmailRequest(BaseModel):
+    applicant_name: str = "Valued Customer"
+    income: float
+    debt: float
+    employment_years: int
+    credit_score: int
+    loan_amount: float = 50_000.0
+    savings_balance: float = 10_000.0
+    run_agent_pipeline: bool = False
+
+
+@app.post("/score-and-email")
+def score_and_email(req: ScoreAndEmailRequest):
+    """Full flow: score application → get decision + reason → LLM generates email (optionally with agent pipeline)."""
+    row = pd.DataFrame([{
+        "income": req.income,
+        "debt": req.debt,
+        "employment_years": req.employment_years,
+        "credit_score": req.credit_score,
+        "loan_amount": req.loan_amount,
+        "savings_balance": req.savings_balance,
+        "approved": 0,
+    }])
+    row = preprocess_features(row)
+    model, feature_cols = get_pipeline()
+    prob = float(predict_proba(model, feature_cols, row)[0])
+    decision_int = int(predict(model, feature_cols, row)[0])
+    decision = "approved" if decision_int == 1 else "denied"
+    reason = explain_decision(row, decision_int)
+    try:
+        from src.llm.email import generate_customer_email
+        from src.agents.pipeline import run_agent_pipeline
+        if req.run_agent_pipeline:
+            result = run_agent_pipeline(
+                "approve" if decision_int == 1 else "deny",
+                req.applicant_name,
+                reason=reason,
+            )
+            return {
+                "approval_probability": prob,
+                "decision": decision,
+                "reason": reason,
+                "email": result.email,
+                "bias_score": result.bias_score,
+                "escalated": result.escalated,
+                "next_best_offer": result.next_best_offer,
+            }
+        email = generate_customer_email(decision, req.applicant_name, reason=reason)
+        return {"approval_probability": prob, "decision": decision, "reason": reason, "email": email}
+    except Exception as e:
+        raise HTTPException(500, str(e))
 
 
 @app.get("/health")
@@ -76,6 +129,7 @@ def health():
 class GenerateEmailRequest(BaseModel):
     decision: str  # approved | denied
     applicant_name: str = "Valued Customer"
+    reason: str | None = None
 
 
 class GenerateEmailResponse(BaseModel):
@@ -84,10 +138,10 @@ class GenerateEmailResponse(BaseModel):
 
 @app.post("/generate-email", response_model=GenerateEmailResponse)
 def generate_email(req: GenerateEmailRequest):
-    """Level 2: Generate customer email from decision (LLM)."""
+    """Level 2: Generate customer email from decision (LLM). Optionally include reason for the decision."""
     try:
         from src.llm.email import generate_customer_email
-        email = generate_customer_email(req.decision, req.applicant_name)
+        email = generate_customer_email(req.decision, req.applicant_name, reason=req.reason)
         return GenerateEmailResponse(email=email)
     except Exception as e:
         raise HTTPException(500, str(e))
@@ -97,6 +151,7 @@ def generate_email(req: GenerateEmailRequest):
 class AgentPipelineRequest(BaseModel):
     decision: str
     applicant_name: str = "Valued Customer"
+    reason: str | None = None
     include_next_best_offer: bool = True
 
 
@@ -108,6 +163,7 @@ def agent_pipeline(req: AgentPipelineRequest):
         result = run_agent_pipeline(
             req.decision,
             req.applicant_name,
+            reason=req.reason,
             include_next_best_offer_on_deny=req.include_next_best_offer,
         )
         return {
