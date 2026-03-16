@@ -21,9 +21,10 @@ def get_prediction_contributions(
     if use_shap:
         try:
             import shap
-            # TreeExplainer supports GradientBoostingClassifier and RandomForestClassifier
+            # TreeExplainer: do NOT pass X as background (that explains row vs itself -> all zeros).
+            # Use model only so SHAP uses tree-path-dependent baseline and returns real contributions.
             if hasattr(model, "estimators_") or hasattr(model, "estimators"):
-                explainer = shap.TreeExplainer(model, X)
+                explainer = shap.TreeExplainer(model)
                 shap_values = explainer.shap_values(X)
                 # Binary: shap_values can be (n_samples, n_features) or list of two arrays
                 if isinstance(shap_values, list):

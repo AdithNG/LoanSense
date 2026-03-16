@@ -6,18 +6,18 @@ A three-level AI loan approval project: **ML scoring** → **LLM email (with rea
 
 ```
 LoanSense/
-├── app.py                 # Streamlit UI (train, score, email/agent)
-├── scripts/               # CLI: train, score, generate_email, run_agent_pipeline
+├── app.py                 # Streamlit UI (train, score, email/agent, SHAP explainer)
+├── scripts/               # CLI: train, tune, score, generate_email, run_agent_pipeline, download_loan_data
 ├── src/
 │   ├── data/              # Load CSV/sample, preprocess, feature engineering
-│   ├── models/            # Train (GB/RF), evaluate, predict, save pipeline
+│   ├── models/            # Train (GB/RF), evaluate, predict, explain (SHAP), save pipeline
 │   ├── llm/               # LLM client (OpenAI/Anthropic), email generation
 │   ├── agents/            # Bias detection, next-best-offer, pipeline
 │   ├── utils/             # Structured logging (LOG_LEVEL, ENV)
 │   └── api/               # FastAPI: /score, /generate-email, /agent-pipeline, /health
-├── tests/                 # Pytest suite (data, models, llm, agents, API)
+├── tests/                 # Pytest suite (data, models, llm, agents, API, explain)
 ├── data/                  # Optional: loan_data.csv
-└── models/                # Saved pipeline (after train)
+└── models/                # Saved pipeline (after train or tune)
 ```
 
 ## Levels
@@ -110,7 +110,7 @@ python scripts/tune.py --data data/loan_data.csv --algorithm gradient_boosting -
 python scripts/score.py --income 50000 --debt 10000 --employment_years 5 --credit_score 650
 ```
 
-**Interpretability:** The `/score` API and Streamlit UI can return **per-prediction feature contributions** (SHAP values) so you can see which features pushed the decision toward approve or deny. Requires the `shap` package; tree-based models (Gradient Boosting, Random Forest) are supported.
+**Interpretability:** After scoring an application, the **Streamlit UI** shows a **"Why this decision? (SHAP contributions)"** expander with per-feature contributions (positive = toward approve, negative = toward deny). The **`/score` API** returns an optional `feature_contributions` object. Requires the `shap` package; tree-based models (Gradient Boosting, Random Forest) are supported.
 
 ### Level 2: Generate email with LLM
 
@@ -132,7 +132,7 @@ uvicorn src.api.main:app --reload
 
 Interactive API docs: **http://127.0.0.1:8000/docs**
 
-**Connected flow:** `POST /score-and-email` — send application + applicant name; get ML decision, reason, and LLM-generated email in one call (optionally with agent pipeline).
+**Endpoints:** `POST /score` returns decision, reason, and optional `feature_contributions` (SHAP). `POST /score-and-email` sends application + applicant name and returns ML decision, reason, and LLM-generated email in one call (optionally with agent pipeline).
 
 ### Web UI (Streamlit)
 
