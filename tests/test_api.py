@@ -79,7 +79,8 @@ def test_score_and_email_email_only(mock_get_pipeline, train_val_test):
     train_df, val_df, _ = train_val_test
     model, _, _, feature_cols = train_model(train_df, val_df, algorithm="gradient_boosting", seed=42)
     mock_get_pipeline.return_value = (model, feature_cols)
-    with patch("src.llm.client.completion") as mock_llm:
+    # Patch where completion is used (email imports it), so API sees the mock
+    with patch("src.llm.email.completion") as mock_llm:
         mock_llm.return_value = "Dear Jane, Your loan has been processed. Loan Services Team"
         r = client.post(
             "/score-and-email",

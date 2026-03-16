@@ -12,9 +12,16 @@ from src.llm.email import generate_customer_email
 from src.agents.pipeline import run_agent_pipeline, AgentPipelineResult
 
 
-@patch("src.llm.client.completion")
-def test_full_flow_score_to_agent_pipeline(mock_completion):
+@patch("src.agents.next_best_offer.completion")
+@patch("src.agents.bias.completion")
+@patch("src.llm.email.completion")
+def test_full_flow_score_to_agent_pipeline(mock_email_completion, mock_bias_completion, mock_offer_completion):
     """Score application -> get reason -> generate email -> run agent pipeline; assert structure."""
+    # Mock all three modules that call completion (patch where it's used)
+    mock_email_completion.return_value = "Dear Customer, Your application has been processed. Loan Services Team"
+    mock_bias_completion.side_effect = ["0.1", "0.2"]  # first call, then strict
+    mock_offer_completion.return_value = "Consider our secured loan product."
+
     # 1. Train a real model (small data)
     df = load_sample_data(n=300, seed=42)
     df = preprocess_features(df)
@@ -33,15 +40,7 @@ def test_full_flow_score_to_agent_pipeline(mock_completion):
     assert isinstance(reason, str)
     assert len(reason) > 0
 
-    # 3. Mock LLM: email, bias score, bias score (strict), next-best-offer (for deny)
-    mock_completion.side_effect = [
-        "Dear Customer, Your application has been processed. Loan Services Team",
-        "0.1",
-        "0.2",
-        "Consider our secured loan product.",
-    ]
-
-    # 4. Run agent pipeline with deny to exercise full flow (uses mocked completion)
+    # 3. Run agent pipeline with deny to exercise full flow (uses mocked completion)
     result = run_agent_pipeline(
         "deny",
         "Jane Doe",
